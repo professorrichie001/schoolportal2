@@ -6,6 +6,7 @@ from requests.auth import HTTPBasicAuth
 import base64
 import webbrowser
 import qrcode3
+import qr_scanner
 from flask import Flask, render_template, request, redirect,jsonify, flash, url_for, send_from_directory, session, send_file, request
 import sqlite3, os, database, document_functions, json,requests
 import io
@@ -375,32 +376,38 @@ def submit_check():
 
 
 class_mapping1 = {
-    "1": "grade1",
-    "2": "grade2",
-    "3": "grade3",
-    "4": "grade4",
-    "5": "grade5",
-    "6": "grade6",
-    "7": "Form1",
-    "8": "Form2",
-    "9": "Form3",
-    "10": "Form4",
-    "11": "Form5",
-    "12": "Form6",
+    "1": "playgroup",
+    "2": "pp1",
+    "3": "pp2",
+    "4": "grade1",
+    "5": "grade2",
+    "6": "grade3",
+    "7": "grade4",
+    "8": "grade5",
+    "9": "grade6",
+    "10": "grade7",
+    "11": "grade8",
+    "12": "grade9",
+    "13": "grade10",
+    "14": "grade11",
+    "15": "grade12",
 }
 class_mapping = {
-     "1": "Grade 1",
-    "2": "Grade 2",
-    "3": "Grade 3",
-    "4": "Grade 4",
-    "5": "Grade 5",
-    "6": "Grade 6",
-    "7": "Form 1",
-    "8": "Form 2",
-    "9": "Form 3",
-    "10": "Form 4",
-    "11": "Form 5",
-    "12": "Form 6",
+    "1": "Play group",
+    "2": "PP1",
+    "3": "PP2",
+    "4": "Grade 1",
+    "5": "Grade 2",
+    "6": "Grade 3",
+    "7": "Grade 4",
+    "8": "Grade 5",
+    "9": "Grade 6",
+    "10": "Grade 7",
+    "11": "Grade 8",
+    "12": "Grade 9",
+    "13": "Grade 10",
+    "14": "Grade 11",
+    "15": "Grade 12",
 }
 
 @app.route("/type_check2")
@@ -466,8 +473,11 @@ def enter_student_marks(admission_no):
     term = int(request.form['term'])
     exam_type = request.form['type']
     database.insert_time(admission_n, year, term, exam_type)
+    
+    # Get enrolled subjects for this student (for this year)
+    enrolled_subjects = enroll_subjects.get_student_enrolled_subjects(admission_n, year)
 
-    return render_template('enter_marks.html', admission_no=admission_n,year=year,exam_type=exam_type, term=term)
+    return render_template('enter_marks.html', admission_no=admission_n, year=year, exam_type=exam_type, term=term, enrolled_subjects=enrolled_subjects)
 
 
 
@@ -1886,6 +1896,691 @@ def forgot_password():
 def password_reset():
     return render_template("password_reset.html")
 
+
+#=============== SUBJECT ENROLLMENT ROUTES ===============#
+import enroll_subjects
+
+@app.route('/enroll_class_subjects', methods=['GET', 'POST'])
+def enroll_class_subjects():
+    """Main page for teacher to select class and enroll in subjects"""
+    teacher_id = session.get('userName')
+    if not teacher_id:
+        return redirect(url_for('login'))
+    
+    profile_pic = database.get_profile_t(teacher_id)
+    conn = sqlite3.connect("admin.db")
+    cursor = conn.cursor()
+    
+    # Get the classes assigned to this teacher
+    cursor.execute("SELECT grade FROM teachers WHERE username = ?", (teacher_id,))
+    result = cursor.fetchone()
+    conn.close()
+    
+    class_options = {}
+    enrollment_status = None
+    selected_class = None
+    
+    if result:
+        grade_numbers = result[0].split(",")
+        class_options = {num.strip(): class_mapping[num.strip()] for num in grade_numbers if num.strip() in class_mapping}
+    
+    # Handle class selection
+    if request.method == 'POST':
+        selected_class = request.form.get('class_select')
+        if selected_class and selected_class in class_mapping1:
+            grade_key = class_mapping1[selected_class]
+            current_year = str(datetime.now().year)
+            enrollment_status = enroll_subjects.get_class_enrollment_status(grade_key, current_year)
+    
+    return render_template('enroll_subjects.html', 
+                         class_options=class_options,
+                         available_subjects=enroll_subjects.AVAILABLE_SUBJECTS,
+                         profile_pic=profile_pic,
+                         selected_class=selected_class,
+                         enrollment_status=enrollment_status)
+
+
+@app.route('/enroll_class_subjects_submit', methods=['POST'])
+def enroll_class_subjects_submit():
+    """Process subject enrollment for entire class"""
+    teacher_id = session.get('userName')
+    if not teacher_id:
+        return redirect(url_for('login'))
+    
+    class_id = request.form.get('class_id')
+    selected_subjects = request.form.getlist('subjects')
+    
+    if not class_id or class_id not in class_mapping1:
+        flash('Invalid class selected', 'error')
+        return redirect(url_for('enroll_class_subjects'))
+    
+    if not selected_subjects:
+        flash('Please select at least one subject', 'warning')
+        return redirect(url_for('enroll_class_subjects'))
+    
+    grade_key = class_mapping1[class_id]
+    current_year = str(datetime.now().year)
+    enrollment_results = {}
+    
+    for subject in selected_subjects:
+        result = enroll_subjects.enroll_class_in_subject(grade_key, subject, current_year)
+        enrollment_results[subject] = result
+    
+    # Build success message
+    message = f"Enrollment complete. "
+    for subject, result in enrollment_results.items():
+        message += f"{subject}: {result['enrolled']} students enrolled. "
+    
+    flash(message, 'success')
+    return redirect(url_for('enroll_class_subjects', class_select=class_id))
+
+
+@app.route('/manage_student_subjects', methods=['GET', 'POST'])
+def manage_student_subjects_page():
+    """View students in a class and their subject enrollment"""
+    teacher_id = session.get('userName')
+    if not teacher_id:
+        return redirect(url_for('login'))
+    
+    profile_pic = database.get_profile_t(teacher_id)
+    conn = sqlite3.connect("admin.db")
+    cursor = conn.cursor()
+    
+    # Get teacher's classes
+    cursor.execute("SELECT grade FROM teachers WHERE username = ?", (teacher_id,))
+    result = cursor.fetchone()
+    conn.close()
+    
+    class_options = {}
+    students_info = []
+    selected_class = None
+    class_name = None
+    
+    if result:
+        grade_numbers = result[0].split(",")
+        class_options = {num.strip(): class_mapping[num.strip()] for num in grade_numbers if num.strip() in class_mapping}
+    
+    if request.method == 'POST':
+        selected_class = request.form.get('class_select')
+        if selected_class and selected_class in class_mapping1:
+            grade_key = class_mapping1[selected_class]
+            class_name = class_mapping.get(selected_class)
+            
+            # Get all students in class with their enrolled subjects
+            all_students = enroll_subjects.get_students_in_class(grade_key)
+            current_year = str(datetime.now().year)
+            for student in all_students:
+                admission_no, first_name, last_name = student
+                enrolled_subjects = enroll_subjects.get_student_enrolled_subjects(admission_no, current_year)
+                students_info.append({
+                    'admission_no': admission_no,
+                    'first_name': first_name,
+                    'last_name': last_name,
+                    'subjects': enrolled_subjects
+                })
+    
+    return render_template('manage_student_subjects.html',
+                         class_options=class_options,
+                         profile_pic=profile_pic,
+                         selected_class=selected_class,
+                         class_name=class_name,
+                         class_id=selected_class,
+                         students=students_info)
+
+
+@app.route('/edit_student_subjects', methods=['POST'])
+def edit_student_subjects():
+    """Edit subjects for a single student"""
+    teacher_id = session.get('userName')
+    if not teacher_id:
+        return redirect(url_for('login'))
+    
+    admission_no = request.form.get('admission_no')
+    class_id = request.form.get('class_id')
+    
+    profile_pic = database.get_profile_t(teacher_id)
+    
+    # Get student details
+    conn = sqlite3.connect('student.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT first_name, last_name FROM students WHERE admission_no = ?', (admission_no,))
+    student = cursor.fetchone()
+    conn.close()
+    
+    if not student:
+        flash('Student not found', 'error')
+        return redirect(url_for('manage_student_subjects_page'))
+    
+    first_name, last_name = student
+    current_year = str(datetime.now().year)
+    enrolled_subjects = enroll_subjects.get_student_enrolled_subjects(admission_no, current_year)
+    
+    return render_template('edit_student_subjects.html',
+                         admission_no=admission_no,
+                         first_name=first_name,
+                         last_name=last_name,
+                         class_id=class_id,
+                         available_subjects=enroll_subjects.AVAILABLE_SUBJECTS,
+                         enrolled_subjects=enrolled_subjects,
+                         profile_pic=profile_pic)
+
+
+@app.route('/save_student_subjects', methods=['POST'])
+def save_student_subjects():
+    """Save subject changes for a student"""
+    teacher_id = session.get('userName')
+    if not teacher_id:
+        return redirect(url_for('login'))
+    
+    admission_no = request.form.get('admission_no')
+    class_id = request.form.get('class_id')
+    selected_subjects = request.form.getlist('subjects')
+    current_year = str(datetime.now().year)
+    
+    # Get current enrolled subjects
+    current_subjects = set(enroll_subjects.get_student_enrolled_subjects(admission_no, current_year))
+    new_subjects = set(selected_subjects)
+    
+    # Unenroll subjects that were removed
+    for subject in current_subjects - new_subjects:
+        enroll_subjects.unenroll_student_subject(admission_no, subject, current_year)
+    
+    # Enroll new subjects
+    for subject in new_subjects - current_subjects:
+        enroll_subjects.enroll_student_subject(admission_no, subject, current_year)
+    
+    flash('Subject enrollment updated successfully', 'success')
+    return redirect(url_for('manage_student_subjects_page'))
+
+
+# ===================== ATTENDANCE MANAGEMENT =====================
+
+@app.route('/attendance')
+def attendance():
+    """Render attendance marking page for teachers"""
+    teacher_id = session.get('userName')
+    if not teacher_id:
+        return redirect(url_for('login'))
+    
+    profile_pic = database.get_profile_t(teacher_id)
+    current_date = datetime.now().strftime('%Y-%m-%d')
+    
+    return render_template('attendance.html', 
+                         profile_pic=profile_pic, 
+                         teacher_id=teacher_id,
+                         current_date=current_date)
+
+
+@app.route('/get_todays_marked_students', methods=['GET'])
+def get_todays_marked_students():
+    """Fetch all students marked present today"""
+    teacher_id = session.get('userName')
+    if not teacher_id:
+        return jsonify({'success': False, 'message': 'Not authenticated'})
+    
+    date = request.args.get('date', datetime.now().strftime('%Y-%m-%d'))
+    
+    with sqlite3.connect('student.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+        SELECT a.admission_no, s.first_name, s.last_name, a.time_in, r.Grade
+        FROM attendance a
+        JOIN students s ON a.admission_no = s.admission_no
+        LEFT JOIN rest r ON a.admission_no = r.admission_no
+        WHERE a.date = ? AND a.status = 'present'
+        ORDER BY a.time_in ASC
+        ''', (date,))
+        records = cursor.fetchall()
+    
+    marked_students = [
+        {
+            'admission': record[0],
+            'name': f"{record[1]} {record[2]}",
+            'time': record[3],
+            'grade': record[4] if record[4] else 'N/A'
+        }
+        for record in records
+    ]
+    
+    return jsonify({'success': True, 'students': marked_students})
+
+@app.route('/mark_attendance', methods=['POST'])
+def mark_attendance():
+    """Mark student attendance via QR code or admission number"""
+    teacher_id = session.get('userName')
+    if not teacher_id:
+        return jsonify({'success': False, 'message': 'Not authenticated'})
+    
+    data = request.get_json()
+    admission_no = data.get('admission_no', '').strip()
+    date = data.get('date', datetime.now().strftime('%Y-%m-%d'))
+    
+    if not admission_no:
+        return jsonify({'success': False, 'message': 'Admission number required'})
+    
+    # Convert admission number if needed
+    admission_no = document_functions.replace_slash_with_slash(admission_no)
+    
+    # Check if student exists and get grade
+    with sqlite3.connect('student.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+        SELECT s.first_name, s.last_name, r.Grade 
+        FROM students s
+        LEFT JOIN rest r ON s.admission_no = r.admission_no
+        WHERE s.admission_no = ?
+        ''', (admission_no,))
+        student = cursor.fetchone()
+    
+    if not student:
+        return jsonify({'success': False, 'message': 'Student not found'})
+    
+    first_name, last_name, grade = student
+    current_time = datetime.now().strftime('%H:%M:%S')
+    
+    # Mark attendance
+    success = database.mark_student_attendance(admission_no, date, current_time, teacher_id)
+    
+    if success:
+        return jsonify({
+            'success': True, 
+            'message': f'{first_name} {last_name} marked present',
+            'student_name': f'{first_name} {last_name}',
+            'grade': grade if grade else 'N/A',
+            'time': current_time
+        })
+    else:
+        return jsonify({'success': False, 'message': 'Error marking attendance'})
+
+
+@app.route('/get_class_attendance')
+def get_class_attendance_route():
+    """Get attendance list for a class"""
+    teacher_id = session.get('userName')
+    if not teacher_id:
+        return redirect(url_for('login'))
+    
+    date = request.args.get('date', datetime.now().strftime('%Y-%m-%d'))
+    class_id = request.args.get('class_id')
+    
+    if not class_id or class_id not in class_mapping1:
+        flash('Invalid class selected', 'error')
+        return redirect(url_for('attendance'))
+    
+    grade_key = class_mapping1[class_id]
+    attendance_records = database.get_class_attendance(grade_key, date)
+    profile_pic = database.get_profile_t(teacher_id)
+    
+    return render_template('attendance_list.html',
+                         attendance_records=attendance_records,
+                         class_name=class_mapping[class_id],
+                         date=date,
+                         profile_pic=profile_pic)
+
+
+@app.route('/scan_qr_python', methods=['GET'])
+def scan_qr_python():
+    """
+    Server-side QR code scanning using Python.
+    Captures frame from camera and detects QR code.
+    """
+    teacher_id = session.get('userName')
+    if not teacher_id:
+        return jsonify({'success': False, 'message': 'Not authenticated'})
+    
+    try:
+        qr_data, frame_b64 = qr_scanner.capture_and_scan_frame()
+        
+        if qr_data:
+            admission_no = qr_scanner.extract_admission_number(qr_data)
+            if admission_no:
+                return jsonify({
+                    'success': True,
+                    'qr_detected': True,
+                    'admission_no': admission_no,
+                    'qr_data': qr_data,
+                    'frame': frame_b64 if frame_b64 else None
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'qr_detected': True,
+                    'message': 'QR code found but could not extract admission number',
+                    'frame': frame_b64 if frame_b64 else None
+                })
+        else:
+            return jsonify({
+                'success': False,
+                'qr_detected': False,
+                'message': 'No QR code detected',
+                'frame': frame_b64 if frame_b64 else None
+            })
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error in scan_qr_python: {str(e)}")
+        return jsonify({'success': False, 'message': f'Scanning error: {str(e)}'})
+
+
+@app.route('/scan_qr_from_image', methods=['POST'])
+def scan_qr_from_image():
+    """
+    Scans QR code from an image uploaded from the client.
+    """
+    teacher_id = session.get('userName')
+    if not teacher_id:
+        return jsonify({'success': False, 'message': 'Not authenticated'})
+    
+    try:
+        data = request.get_json()
+        image_base64 = data.get('image', '')
+        
+        if not image_base64:
+            return jsonify({'success': False, 'message': 'No image provided'})
+        
+        qr_data = qr_scanner.scan_qr_from_base64(image_base64)
+        
+        if qr_data:
+            admission_no = qr_scanner.extract_admission_number(qr_data)
+            if admission_no:
+                return jsonify({
+                    'success': True,
+                    'qr_detected': True,
+                    'admission_no': admission_no,
+                    'qr_data': qr_data
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'qr_detected': True,
+                    'message': 'QR code found but could not extract admission number'
+                })
+        else:
+            return jsonify({
+                'success': False,
+                'qr_detected': False,
+                'message': 'No QR code detected in image'
+            })
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error in scan_qr_from_image: {str(e)}")
+        return jsonify({'success': False, 'message': f'Scanning error: {str(e)}'})
+
+
+@app.route('/students_by_grade')
+def students_by_grade():
+    """View all students grouped by grade"""
+    teacher_id = session.get('userName')
+    if not teacher_id:
+        return redirect(url_for('login'))
+    
+    profile_pic = database.get_profile_t(teacher_id)
+    
+    with sqlite3.connect('student.db') as conn:
+        cursor = conn.cursor()
+        # Get all students grouped by grade, ordered by grade and name
+        cursor.execute('''
+            SELECT r.Grade, s.admission_no, s.first_name, s.last_name
+            FROM students s
+            LEFT JOIN rest r ON s.admission_no = r.admission_no
+            ORDER BY r.Grade ASC, s.last_name ASC, s.first_name ASC
+        ''')
+        students = cursor.fetchall()
+    
+    # Group students by grade
+    students_by_grade_dict = {}
+    for grade, admission_no, first_name, last_name in students:
+        grade_name = grade if grade else 'Unassigned'
+        if grade_name not in students_by_grade_dict:
+            students_by_grade_dict[grade_name] = []
+        students_by_grade_dict[grade_name].append({
+            'admission_no': admission_no,
+            'first_name': first_name,
+            'last_name': last_name,
+            'admission_no_encoded': document_functions.replace_slash_with_dot(admission_no)
+        })
+    
+    # Sort grades
+    sorted_grades = sorted(students_by_grade_dict.keys())
+    
+    # Calculate total students
+    total_students = sum(len(students) for students in students_by_grade_dict.values())
+    
+    return render_template('students_by_grade.html',
+                         students_by_grade=students_by_grade_dict,
+                         sorted_grades=sorted_grades,
+                         total_students=total_students,
+                         profile_pic=profile_pic)
+
+
+@app.route('/attendance_history/<admission_no>')
+def attendance_history(admission_no):
+    """View attendance history for a student"""
+    teacher_id = session.get('userName')
+    if not teacher_id:
+        return redirect(url_for('login'))
+    
+    admission_n = document_functions.replace_slash_with_slash(admission_no)
+    
+    # Get student info
+    with sqlite3.connect('student.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT first_name, last_name FROM students WHERE admission_no = ?', (admission_n,))
+        student = cursor.fetchone()
+    
+    if not student:
+        flash('Student not found', 'error')
+        return redirect(url_for('attendance'))
+    
+    first_name, last_name = student
+    history = database.get_student_attendance_history(admission_n, days=60)
+    profile_pic = database.get_profile_t(teacher_id)
+    
+    return render_template('attendance_history.html',
+                         first_name=first_name,
+                         last_name=last_name,
+                         admission_no=document_functions.replace_slash_with_dot(admission_no),
+                         history=history,
+                         profile_pic=profile_pic)
+
+
+@app.route('/register_out', methods=['GET', 'POST'])
+def register_out():
+    """Page for student checkout"""
+    teacher_id = session.get('userName')
+    if not teacher_id:
+        return redirect(url_for('login'))
+    
+    current_date = datetime.now().strftime('%Y-%m-%d')
+    profile_pic = database.get_profile_t(teacher_id)
+    
+    return render_template('register_out.html', 
+                         current_date=current_date,
+                         profile_pic=profile_pic)
+
+
+@app.route('/attendance_report', methods=['GET', 'POST'])
+def attendance_report():
+    """View attendance report with filters"""
+    teacher_id = session.get('userName')
+    if not teacher_id:
+        return redirect(url_for('login'))
+    
+    profile_pic = database.get_profile_t(teacher_id)
+    current_date = datetime.now().strftime('%Y-%m-%d')
+    
+    # Default filters
+    filter_date = request.args.get('date', current_date)
+    filter_grade = request.args.get('grade', '')
+    filter_admission = request.args.get('admission', '').strip()
+    filter_name = request.args.get('name', '').strip()
+    
+    # Build query based on filters
+    query = '''
+    SELECT a.admission_no, s.first_name, s.last_name, a.time_in, a.time_out, 
+           a.marked_by, a.marked_out_by, r.Grade
+    FROM attendance a
+    JOIN students s ON a.admission_no = s.admission_no
+    LEFT JOIN rest r ON a.admission_no = r.admission_no
+    WHERE a.date = ?
+    '''
+    
+    params = [filter_date]
+    
+    if filter_grade:
+        query += ' AND r.Grade = ?'
+        params.append(filter_grade)
+    
+    if filter_admission:
+        query += ' AND a.admission_no LIKE ?'
+        params.append(f'%{filter_admission}%')
+    
+    if filter_name:
+        query += ' AND (s.first_name LIKE ? OR s.last_name LIKE ?)'
+        params.append(f'%{filter_name}%')
+        params.append(f'%{filter_name}%')
+    
+    query += ' ORDER BY r.Grade ASC, s.last_name ASC'
+    
+    with sqlite3.connect('student.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+        records = cursor.fetchall()
+    
+    # Get unique grades for filter dropdown
+    with sqlite3.connect('student.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT DISTINCT Grade FROM rest ORDER BY Grade ASC')
+        grades = [row[0] for row in cursor.fetchall() if row[0]]
+    
+    attendance_records = [
+        {
+            'admission': record[0],
+            'first_name': record[1],
+            'last_name': record[2],
+            'time_in': record[3],
+            'time_out': record[4],
+            'marked_by': record[5],
+            'marked_out_by': record[6] if record[6] else '-',
+            'grade': record[7] if record[7] else 'N/A'
+        }
+        for record in records
+    ]
+    
+    return render_template('attendance_report.html',
+                         attendance_records=attendance_records,
+                         grades=grades,
+                         filter_date=filter_date,
+                         filter_grade=filter_grade,
+                         filter_admission=filter_admission,
+                         filter_name=filter_name,
+                         profile_pic=profile_pic,
+                         total_present=len(attendance_records))
+
+
+@app.route('/mark_checkout', methods=['POST'])
+def mark_checkout():
+    """Mark student checkout (register out)"""
+    teacher_id = session.get('userName')
+    if not teacher_id:
+        return jsonify({'success': False, 'message': 'Not authenticated'})
+    
+    data = request.get_json()
+    admission_no = data.get('admission_no', '').strip()
+    date = data.get('date', datetime.now().strftime('%Y-%m-%d'))
+    
+    if not admission_no:
+        return jsonify({'success': False, 'message': 'Admission number required'})
+    
+    # Convert admission number if needed
+    admission_no = document_functions.replace_slash_with_slash(admission_no)
+    
+    # Check if student exists and is checked in
+    with sqlite3.connect('student.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+        SELECT s.first_name, s.last_name, r.Grade, a.time_in, a.time_out
+        FROM students s
+        LEFT JOIN rest r ON s.admission_no = r.admission_no
+        LEFT JOIN attendance a ON s.admission_no = a.admission_no AND a.date = ?
+        WHERE s.admission_no = ?
+        ''', (date, admission_no))
+        student = cursor.fetchone()
+
+    with sqlite3.connect('student.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+        UPDATE attendance 
+        SET status = 'out'
+        WHERE admission_no = ? AND date = ?
+        ''', (admission_no, date))
+        conn.commit()
+
+    
+    if not student:
+        return jsonify({'success': False, 'message': 'Student not found'})
+    
+    first_name, last_name, grade, time_in, time_out = student
+    
+    if not time_in:
+        return jsonify({'success': False, 'message': 'Student has not checked in today'})
+    
+    if time_out:
+        return jsonify({'success': False, 'message': 'Student already checked out'})
+    
+    current_time = datetime.now().strftime('%H:%M:%S')
+    
+    # Mark checkout
+    success = database.mark_student_checkout(admission_no, date, current_time, teacher_id)
+    
+    if success:
+        return jsonify({
+            'success': True,
+            'message': f'{first_name} {last_name} checked out',
+            'student_name': f'{first_name} {last_name}',
+            'grade': grade if grade else 'N/A',
+            'time_in': time_in,
+            'time_out': current_time
+        })
+    else:
+        return jsonify({'success': False, 'message': 'Error marking checkout'})
+
+
+@app.route('/get_todays_checkouts', methods=['GET'])
+def get_todays_checkouts():
+    """Get all students checked out today"""
+    teacher_id = session.get('userName')
+    if not teacher_id:
+        return jsonify({'success': False, 'message': 'Not authenticated'})
+    
+    date = request.args.get('date', datetime.now().strftime('%Y-%m-%d'))
+    
+    with sqlite3.connect('student.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+        SELECT a.admission_no, s.first_name, s.last_name, a.time_in, a.time_out, a.marked_out_by, r.Grade
+        FROM attendance a
+        JOIN students s ON a.admission_no = s.admission_no
+        LEFT JOIN rest r ON a.admission_no = r.admission_no
+        WHERE a.date = ? AND a.time_out IS NOT NULL
+        ORDER BY a.time_out DESC
+        ''', (date,))
+        records = cursor.fetchall()
+    
+    checkout_students = [
+        {
+            'admission': record[0],
+            'name': f"{record[1]} {record[2]}",
+            'time_in': record[3],
+            'time_out': record[4],
+            'marked_out_by': record[5] if record[5] else 'System',
+            'grade': record[6] if record[6] else 'N/A'
+        }
+        for record in records
+    ]
+    
+    return jsonify({'success': True, 'checkouts': checkout_students})
+    
+    return jsonify({'success': True, 'checkouts': checkout_students})
 
 
 if __name__ == '__main__':

@@ -101,9 +101,12 @@ def qr_gate_access(data):
 
 def qr_class_access(data,the_class):
     try:
-        if new_data[16] == the_class:
+        if data == the_class:
             return "access granted"
         else:
             return "please contact the admin"
     except IndexError:
         return "please consult with admin"
+    
+
+

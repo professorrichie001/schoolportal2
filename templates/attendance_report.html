@@ -1,0 +1,187 @@
+{% extends "admin_dashboard.html" %}
+{% block content %}
+<link rel="stylesheet" href="../static/assets/css/styles.min.css" />
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
+
+<style>
+.container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+.header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+.header h2 { margin: 0; font-size: 24px; }
+.filters-section { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+.filters-title { font-weight: 600; font-size: 16px; margin-bottom: 15px; color: #333; }
+.filter-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 15px; }
+.form-group { display: flex; flex-direction: column; }
+.form-group label { font-weight: 600; margin-bottom: 5px; color: #333; font-size: 13px; }
+.form-group input, .form-group select { padding: 10px; border: 2px solid #ddd; border-radius: 5px; font-size: 14px; }
+.form-group input:focus, .form-group select:focus { border-color: #667eea; outline: none; }
+.btn-group { display: flex; gap: 10px; }
+.btn { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: 600; font-size: 14px; }
+.btn-primary { background: #667eea; color: white; }
+.btn-primary:hover { background: #5568d3; }
+.btn-secondary { background: #f0f0f0; color: #333; }
+.btn-secondary:hover { background: #e0e0e0; }
+.stats-box { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 20px; }
+.stat-card { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: center; }
+.stat-card .number { font-size: 28px; font-weight: 700; color: #667eea; }
+.stat-card .label { font-size: 12px; color: #666; margin-top: 5px; }
+.table-section { background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+.table { width: 100%; border-collapse: collapse; }
+.table th { background: #667eea; color: white; padding: 12px; text-align: left; font-weight: 600; font-size: 13px; }
+.table td { padding: 12px; border-bottom: 1px solid #eee; font-size: 13px; }
+.table tr:hover { background: #f5f5f5; }
+.grade-badge { display: inline-block; background: #667eea; color: white; padding: 4px 8px; border-radius: 4px; font-weight: 600; }
+.empty-state { text-align: center; padding: 40px; color: #999; }
+.export-btn { background: #28a745; color: white; }
+.export-btn:hover { background: #218838; }
+@media (max-width: 768px) { .filter-row { grid-template-columns: 1fr; } .btn-group { flex-direction: column; } }
+</style>
+
+<div class="container">
+  <div class="header">
+    <h2><i class="fas fa-chart-bar"></i> Attendance Report</h2>
+    <p style="margin: 10px 0 0 0; font-size: 14px;">View and filter attendance records</p>
+  </div>
+
+  <!-- Filters Section -->
+  <div class="filters-section">
+    <div class="filters-title"><i class="fas fa-filter"></i> Filter Options</div>
+    <form method="GET" class="filter-form">
+      <div class="filter-row">
+        <div class="form-group">
+          <label for="date">Date</label>
+          <input type="date" id="date" name="date" value="{{ filter_date }}" required>
+        </div>
+        <div class="form-group">
+          <label for="grade">Grade/Class</label>
+          <select id="grade" name="grade">
+            <option value="">All Grades</option>
+            {% for g in grades %}
+            <option value="{{ g }}" {% if filter_grade == g %}selected{% endif %}>{{ g }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="admission">Admission Number</label>
+          <input type="text" id="admission" name="admission" placeholder="Search admission..." value="{{ filter_admission }}">
+        </div>
+        <div class="form-group">
+          <label for="name">Student Name</label>
+          <input type="text" id="name" name="name" placeholder="Search name..." value="{{ filter_name }}">
+        </div>
+      </div>
+      <div class="btn-group">
+        <button type="submit" class="btn btn-primary"><i class="fas fa-search"></i> Search</button>
+        <a href="{{ url_for('attendance_report') }}" class="btn btn-secondary"><i class="fas fa-redo"></i> Reset</a>
+      </div>
+    </form>
+  </div>
+
+  <!-- Statistics -->
+  <div class="stats-box">
+    <div class="stat-card">
+      <div class="number">{{ total_present }}</div>
+      <div class="label">Present Today</div>
+    </div>
+    {% if attendance_records|length > 0 %}
+    <div class="stat-card">
+      <div class="number">{{ attendance_records|length }}</div>
+      <div class="label">Matching Results</div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Attendance Table -->
+  <div class="table-section">
+    {% if attendance_records %}
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Admission No</th>
+          <th>Student Name</th>
+          <th>Grade</th>
+          <th>Time In</th>
+          <th>Marked By</th>
+          <th>Time Out</th>
+          <th>Marked Out By</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for record in attendance_records %}
+        <tr>
+          <td><strong>{{ record.admission }}</strong></td>
+          <td>{{ record.first_name }} {{ record.last_name }}</td>
+          <td><span class="grade-badge">{{ record.grade }}</span></td>
+          <td>{{ record.time_in if record.time_in else '-' }}</td>
+          <td>{{ record.marked_by if record.marked_by else '-' }}</td>
+          <td>
+            {% if record.time_out %}
+              <strong>{{ record.time_out }}</strong>
+            {% else %}
+              <span style="color: #999;">Not checked out</span>
+            {% endif %}
+          </td>
+          <td>{{ record.marked_out_by }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+      <i class="fas fa-inbox" style="font-size: 48px; margin-bottom: 15px;"></i>
+      <p>No attendance records found for the selected filters</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Export Options -->
+  <div style="margin-top: 20px; text-align: center;">
+    <button class="btn export-btn" onclick="printTable()"><i class="fas fa-print"></i> Print</button>
+    <button class="btn export-btn" onclick="exportToCSV()"><i class="fas fa-download"></i> Export CSV</button>
+  </div>
+</div>
+
+<script>
+function printTable() {
+  window.print();
+}
+
+function exportToCSV() {
+  const table = document.querySelector('.table');
+  if (!table) {
+    alert('No data to export');
+    return;
+  }
+
+  let csv = [];
+  
+  // Header
+  const headers = [];
+  document.querySelectorAll('.table th').forEach(th => {
+    headers.push('"' + th.textContent.trim() + '"');
+  });
+  csv.push(headers.join(','));
+
+  // Rows
+  document.querySelectorAll('.table tbody tr').forEach(tr => {
+    const row = [];
+    tr.querySelectorAll('td').forEach(td => {
+      let text = td.textContent.trim();
+      text = text.replace(/"/g, '""');
+      row.push('"' + text + '"');
+    });
+    csv.push(row.join(','));
+  });
+
+  // Download
+  const csvContent = csv.join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'attendance_report_{{ filter_date }}.csv';
+  a.click();
+  window.URL.revokeObjectURL(url);
+}
+</script>
+
+{% endblock %}

@@ -1,0 +1,134 @@
+{% extends "admin_dashboard.html" %}
+{% block content %}
+<link rel="stylesheet" href="../static/assets/css/styles.min.css" />
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
+
+<style>
+.container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+.header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px; margin-bottom: 30px; }
+.header h2 { margin: 0; font-size: 24px; }
+.grade-section { margin-bottom: 30px; }
+.grade-header { background: #f8f9fa; padding: 15px 20px; border-left: 4px solid #667eea; margin-bottom: 0; border-radius: 4px 4px 0 0; font-weight: 600; font-size: 16px; color: #333; display: flex; justify-content: space-between; align-items: center; }
+.grade-count { background: #667eea; color: white; padding: 4px 10px; border-radius: 20px; font-size: 13px; font-weight: 600; }
+.students-table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.1); border-radius: 0 0 4px 4px; }
+.students-table thead { background: #f0f0f0; }
+.students-table th { padding: 12px 15px; text-align: left; font-weight: 600; color: #333; font-size: 13px; border-bottom: 2px solid #ddd; }
+.students-table td { padding: 12px 15px; border-bottom: 1px solid #eee; font-size: 13px; }
+.students-table tbody tr { transition: background 0.2s; }
+.students-table tbody tr:hover { background: #f5f5f5; }
+.student-row { cursor: pointer; }
+.student-name { font-weight: 500; color: #333; }
+.admission-no { color: #666; font-family: monospace; }
+.action-link { color: #667eea; text-decoration: none; display: flex; align-items: center; gap: 5px; }
+.action-link:hover { color: #764ba2; text-decoration: underline; }
+.empty-state { text-align: center; padding: 40px; color: #999; }
+.search-box { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+.search-input { width: 100%; max-width: 400px; padding: 10px 15px; border: 2px solid #ddd; border-radius: 5px; font-size: 14px; }
+.search-input:focus { border-color: #667eea; outline: none; }
+.filter-info { margin-top: 10px; font-size: 12px; color: #999; }
+@media (max-width: 768px) { 
+  .grade-header { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .students-table { font-size: 12px; }
+  .students-table th, .students-table td { padding: 8px 10px; }
+}
+</style>
+
+<div class="container">
+  <div class="header">
+    <h2><i class="fas fa-users"></i> Students by Grade</h2>
+    <p style="margin: 10px 0 0 0; font-size: 14px;">View all students organized by grade and click to access attendance history</p>
+  </div>
+
+  <!-- Search Box -->
+  <div class="search-box">
+    <input type="text" class="search-input" id="searchInput" placeholder="Search by name or admission number..." onkeyup="filterStudents()">
+    <div class="filter-info">
+      <span id="totalStudents">Total: {{ total_students }} students</span>
+      <span id="matchedStudents" style="display: none;"></span>
+    </div>
+  </div>
+
+  <!-- Grades Sections -->
+  {% if sorted_grades %}
+    {% for grade in sorted_grades %}
+      {% set grade_students = students_by_grade[grade] %}
+      <div class="grade-section" data-grade="{{ grade }}">
+        <div class="grade-header">
+          <span>{{ grade }}</span>
+          <span class="grade-count">{{ grade_students|length }} Student{{ 's' if grade_students|length != 1 else '' }}</span>
+        </div>
+        <table class="students-table">
+          <thead>
+            <tr>
+              <th style="width: 15%;">Admission No</th>
+              <th style="width: 35%;">Student Name</th>
+              <th style="width: 50%;">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for student in grade_students %}
+            <tr class="student-row" data-search="{{ student.admission_no }} {{ student.first_name }} {{ student.last_name }}">
+              <td class="admission-no">{{ student.admission_no }}</td>
+              <td class="student-name">{{ student.first_name }} {{ student.last_name }}</td>
+              <td>
+                <a href="{{ url_for('attendance_history', admission_no=student.admission_no_encoded) }}" class="action-link">
+                  <i class="fas fa-history"></i> View Attendance
+                </a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty-state">
+      <i class="fas fa-inbox" style="font-size: 48px; margin-bottom: 15px;"></i>
+      <p>No students found</p>
+    </div>
+  {% endif %}
+</div>
+
+<script>
+function filterStudents() {
+  const searchInput = document.getElementById('searchInput').value.toLowerCase();
+  const gradeSections = document.querySelectorAll('.grade-section');
+  let totalMatched = 0;
+  let totalRows = 0;
+
+  gradeSections.forEach(section => {
+    const rows = section.querySelectorAll('.student-row');
+    let visibleInGrade = 0;
+
+    rows.forEach(row => {
+      const searchText = row.dataset.search.toLowerCase();
+      const isVisible = searchText.includes(searchInput);
+      row.style.display = isVisible ? '' : 'none';
+      if (isVisible) visibleInGrade++;
+      totalRows++;
+    });
+
+    totalMatched += visibleInGrade;
+    
+    // Hide entire grade section if no students match
+    if (visibleInGrade === 0) {
+      section.style.display = 'none';
+    } else {
+      section.style.display = '';
+    }
+  });
+
+  // Update filter info
+  const matchedStudentsSpan = document.getElementById('matchedStudents');
+  if (searchInput) {
+    matchedStudentsSpan.textContent = `Matched: ${totalMatched} of {{ total_students }} students`;
+    matchedStudentsSpan.style.display = 'inline';
+    document.getElementById('totalStudents').style.display = 'none';
+  } else {
+    matchedStudentsSpan.style.display = 'none';
+    document.getElementById('totalStudents').style.display = 'inline';
+  }
+}
+</script>
+
+{% endblock %}

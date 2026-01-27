@@ -219,18 +219,21 @@ class_mapping = {
     "12": "Form 6",
 }
 class_mapping1 = {
-    "1": "grade1",
-    "2": "grade2",
-    "3": "grade3",
-    "4": "grade4",
-    "5": "grade5",
-    "6": "grade6",
-    "7": "form1",
-    "8": "form2",
-    "9": "form3",
-    "10": "form4",
-    "11": "form5",
-    "12": "form6",
+    "1": "playgroup",
+    "2": "pp1",
+    "3": "pp2",
+    "4": "grade1",
+    "5": "grade2",
+    "6": "grade3",
+    "7": "grade4",
+    "8": "grade5",
+    "9": "grade6",
+    "10": "grade7",
+    "11": "grade8",
+    "12": "grade9",
+    "13": "grade10",
+    "14": "grade11",
+    "15": "grade12",
 }
 
 @app.route("/type_check2")

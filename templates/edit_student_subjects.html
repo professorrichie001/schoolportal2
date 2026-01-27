@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Student Subjects</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px 0;
+        }
+        .container {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            padding: 40px;
+            margin-top: 30px;
+            max-width: 700px;
+        }
+        .card {
+            border: none;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .card-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 8px 8px 0 0;
+            padding: 15px 20px;
+            font-weight: bold;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            text-align: center;
+            font-weight: bold;
+        }
+        .student-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .student-info p {
+            margin: 5px 0;
+            color: #555;
+        }
+        .student-info strong {
+            color: #333;
+        }
+        .checkbox-group {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .form-check {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+        .form-check:hover {
+            background: #f0f4ff;
+        }
+        .form-check-input {
+            margin-top: 0.3rem;
+            cursor: pointer;
+        }
+        .form-check-label {
+            margin-left: 10px;
+            cursor: pointer;
+            font-weight: 500;
+            color: #333;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 5px;
+            padding: 10px 30px;
+        }
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+        }
+        .btn-secondary {
+            background: #6c757d;
+            border: none;
+            border-radius: 5px;
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .button-group button {
+            flex: 1;
+        }
+        .back-link {
+            margin-top: 20px;
+            text-align: center;
+        }
+        .back-link a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .alert {
+            border-radius: 5px;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div style="text-align: right; margin-bottom: 20px;">
+            {% if profile_pic %}
+                <img src="{{ profile_pic }}" alt="Profile" style="width: 50px; height: 50px; border-radius: 50%;">
+            {% endif %}
+        </div>
+
+        <h1>✏️ Edit Student Subjects</h1>
+
+        {% if message %}
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="close" data-dismiss="alert">&times;</button>
+            </div>
+        {% endif %}
+
+        <div class="student-info">
+            <p><strong>Admission No:</strong> <code>{{ admission_no }}</code></p>
+            <p><strong>Name:</strong> {{ first_name }} {{ last_name }}</p>
+            <p><strong>Currently Enrolled:</strong> 
+                {% if enrolled_subjects %}
+                    {% for subject in enrolled_subjects %}
+                        <span class="badge badge-primary">{{ subject }}</span>
+                    {% endfor %}
+                {% else %}
+                    <span class="badge badge-secondary">None</span>
+                {% endif %}
+            </p>
+        </div>
+
+        <div class="card">
+            <div class="card-header">Available Subjects</div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('save_student_subjects') }}">
+                    <input type="hidden" name="admission_no" value="{{ admission_no }}">
+                    <input type="hidden" name="class_id" value="{{ class_id }}">
+
+                    <div class="checkbox-group">
+                        {% for subject in available_subjects %}
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="subject_{{ loop.index }}" 
+                                       name="subjects" value="{{ subject }}"
+                                       {% if subject in enrolled_subjects %}checked{% endif %}>
+                                <label class="form-check-label" for="subject_{{ loop.index }}">
+                                    {{ subject }}
+                                </label>
+                            </div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="button-group">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Save Changes
+                        </button>
+                        <a href="{{ url_for('manage_student_subjects_page') }}" class="btn btn-secondary">
+                            <i class="fas fa-times"></i> Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="back-link">
+            <a href="{{ url_for('manage_student_subjects_page') }}">← Back</a>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</body>
+</html>

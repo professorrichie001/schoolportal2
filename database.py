@@ -1,5 +1,6 @@
 import sqlite3
 import document_functions
+from datetime import datetime
 
 
 #---------------------------------Create Table--------------------------------------------------#
@@ -1183,6 +1184,59 @@ def add_all_tables():
     add_non_compliant_students()
     setup_database()
     teachers()
+    # Import and initialize subject enrollment table
+    try:
+        import enroll_subjects
+        enroll_subjects.init_student_subject_enrollment_table()
+        migrate_subject_enrollment_table()
+    except Exception as e:
+        print(f"Warning: Could not initialize subject enrollment table: {e}")
+    
+    # Initialize attendance table
+    try:
+        init_attendance_table()
+    except Exception as e:
+        print(f"Warning: Could not initialize attendance table: {e}")
+
+def migrate_subject_enrollment_table():
+    """Migrate subject_subject_enrollment table to include year column if needed"""
+    try:
+        with sqlite3.connect('student.db') as conn:
+            cursor = conn.cursor()
+            # Check if year column exists
+            cursor.execute("PRAGMA table_info(student_subject_enrollment)")
+            columns = [column[1] for column in cursor.fetchall()]
+            
+            if 'year' not in columns:
+                # Column doesn't exist, we need to migrate
+                # Create a new table with the year column
+                cursor.execute('''
+                CREATE TABLE IF NOT EXISTS student_subject_enrollment_new(
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    admission_no TEXT,
+                    subject TEXT,
+                    year TEXT,
+                    enrollment_date DATETIME,
+                    status TEXT DEFAULT 'active',
+                    FOREIGN KEY (admission_no) REFERENCES students (admission_no),
+                    UNIQUE(admission_no, subject, year)
+                )
+                ''')
+                
+                # Copy existing data, assuming all old records are for current year
+                current_year = str(datetime.now().year)
+                cursor.execute('''
+                INSERT INTO student_subject_enrollment_new (id, admission_no, subject, year, enrollment_date, status)
+                SELECT id, admission_no, subject, ?, enrollment_date, status
+                FROM student_subject_enrollment
+                ''', (current_year,))
+                
+                # Drop old table and rename new one
+                cursor.execute('DROP TABLE student_subject_enrollment')
+                cursor.execute('ALTER TABLE student_subject_enrollment_new RENAME TO student_subject_enrollment')
+                conn.commit()
+    except Exception as e:
+        print(f"Warning: Could not migrate subject enrollment table: {e}")
 #===============Get Emails for each person  as per db_name, tableName, colName
 
 def get_emails(db_name, tableName, colName):
@@ -1275,3 +1329,154 @@ def get_password_t(db_name, email):
     except sqlite3.Error as e:
         print(f"Database error: {e}")
         return None
+
+
+# ======================== ATTENDANCE MANAGEMENT ========================
+
+def init_attendance_table():
+    """Create attendance table for tracking student attendance"""
+    with sqlite3.connect('student.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS attendance(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            admission_no TEXT,
+            date TEXT,
+            time_in TEXT,
+            time_out TEXT,
+            status TEXT DEFAULT 'present',
+            marked_by TEXT,
+            marked_out_by TEXT,
+            FOREIGN KEY (admission_no) REFERENCES students (admission_no),
+            UNIQUE(admission_no, date)
+        )
+        ''')
+        conn.commit()
+        
+        # Add time_out and marked_out_by columns if they don't exist (for existing databases)
+        try:
+            cursor.execute('ALTER TABLE attendance ADD COLUMN time_out TEXT')
+            conn.commit()
+        except sqlite3.OperationalError:
+            # Column already exists
+            pass
+        
+        try:
+            cursor.execute('ALTER TABLE attendance ADD COLUMN marked_out_by TEXT')
+            conn.commit()
+        except sqlite3.OperationalError:
+            # Column already exists
+            pass
+
+
+def mark_student_attendance(admission_no, date, time_in, marked_by):
+    """Mark a student as present"""
+    with sqlite3.connect('student.db') as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute('''
+            INSERT OR REPLACE INTO attendance (admission_no, date, time_in, status, marked_by)
+            VALUES (?, ?, ?, 'present', ?)
+            ''', (admission_no, date, time_in, marked_by))
+            conn.commit()
+            return True
+        except sqlite3.Error as e:
+            print(f"Error marking attendance: {e}")
+            return False
+
+
+def get_attendance_record(admission_no, date):
+    """Get attendance record for a student on a specific date"""
+    with sqlite3.connect('student.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+        SELECT id, status, time_in FROM attendance
+        WHERE admission_no = ? AND date = ?
+        ''', (admission_no, date))
+        return cursor.fetchone()
+
+
+def get_student_attendance_by_date(date):
+    """Get all attendance records for a specific date"""
+    with sqlite3.connect('student.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+        SELECT s.admission_no, s.first_name, s.last_name, a.status, a.time_in
+        FROM attendance a
+        JOIN students s ON a.admission_no = s.admission_no
+        WHERE a.date = ?
+        ORDER BY a.time_in DESC
+        ''', (date,))
+        return cursor.fetchall()
+
+
+def get_class_attendance(grade, date):
+    """Get attendance for all students in a class on a specific date"""
+    with sqlite3.connect('student.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+        SELECT s.admission_no, s.first_name, s.last_name, 
+               CASE WHEN a.id IS NOT NULL THEN 'present' ELSE 'absent' END as status,
+               a.time_in
+        FROM students s
+        INNER JOIN rest r ON s.admission_no = r.admission_no
+        LEFT JOIN attendance a ON s.admission_no = a.admission_no AND a.date = ?
+        WHERE r.Grade = ?
+        ORDER BY s.last_name, s.first_name
+        ''', (date, grade))
+        return cursor.fetchall()
+
+
+def get_student_attendance_history(admission_no, days=30):
+    """Get attendance history for a student for the past n days"""
+    with sqlite3.connect('student.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+        SELECT date, status, time_in, time_out, marked_by, marked_out_by FROM attendance
+        WHERE admission_no = ?
+        ORDER BY date DESC
+        LIMIT ?
+        ''', (admission_no, days))
+        return cursor.fetchall()
+
+
+def mark_student_checkout(admission_no, date, time_out, marked_out_by):
+    """Mark a student checkout (time_out) with who marked them out"""
+    with sqlite3.connect('student.db') as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute('''
+            UPDATE attendance 
+            SET time_out = ?, marked_out_by = ?
+            WHERE admission_no = ? AND date = ?
+            ''', (time_out, marked_out_by, admission_no, date))
+            conn.commit()
+            return True
+        except sqlite3.Error as e:
+            print(f"Error marking checkout: {e}")
+            return False
+
+
+def get_checkout_status(admission_no, date):
+    """Get checkout status for a student on a specific date"""
+    with sqlite3.connect('student.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+        SELECT time_in, time_out, marked_out_by FROM attendance
+        WHERE admission_no = ? AND date = ?
+        ''', (admission_no, date))
+        return cursor.fetchone()
+
+
+def get_todays_checkouts(date):
+    """Get all checkout records for a specific date"""
+    with sqlite3.connect('student.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+        SELECT s.admission_no, s.first_name, s.last_name, a.time_in, a.time_out, a.marked_out_by
+        FROM attendance a
+        JOIN students s ON a.admission_no = s.admission_no
+        WHERE a.date = ? AND a.time_out IS NOT NULL
+        ORDER BY a.time_out DESC
+        ''', (date,))
+        return cursor.fetchall()

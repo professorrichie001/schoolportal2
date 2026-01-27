@@ -950,3 +950,14 @@ import app2
     # </script> -->
 # import database
 # print(database.get_exam_type("EB3/57373/21"))
+
+import sqlite3
+
+conn = sqlite3.connect("student.db")
+cursor = conn.cursor()
+
+cursor.execute("DELETE FROM attendance;")
+print("All records deleted from attendance table.")
+conn.commit()
+
+conn.close()

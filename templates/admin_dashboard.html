@@ -55,6 +55,21 @@
             </li>
 
             <li class="sidebar-item">
+              <a class="sidebar-link" href="{{ url_for('enroll_class_subjects') }}" aria-expanded="false">
+                <span class="icon"><ion-icon name="book-outline"></ion-icon></span>
+                <span class="hide-menu">Enroll Class Subjects</span>
+              </a>
+            </li>
+
+            <li class="sidebar-item">
+              <a class="sidebar-link" href="{{ url_for('manage_student_subjects_page') }}" aria-expanded="false">
+                <span class="icon"><ion-icon name="book-outline"></ion-icon></span>
+                <span class="hide-menu">Manage Student Subjects</span>
+              </a>
+            </li>
+            
+
+            <li class="sidebar-item">
               <a class="sidebar-link" href="{{ url_for('scores_by_class') }}" aria-expanded="false">
                 <span class="icon"><ion-icon name="newspaper-outline"></ion-icon></span>
                 <span class="hide-menu">Student Scores</span>
@@ -72,6 +87,34 @@
               <a class="sidebar-link" href="{{ url_for('view_students_marks') }}" aria-expanded="false">
                 <span class="icon"><ion-icon name="clipboard"></ion-icon></span>
                 <span class="hide-menu">Set Exam Scores</span>
+              </a>
+            </li>
+            
+            <li class="sidebar-item">
+              <a class="sidebar-link" href="{{ url_for('attendance_report') }}" aria-expanded="false">
+                <span class="icon"><ion-icon name="checkmark-circle-outline"></ion-icon></span>
+                <span class="hide-menu">Attendance Report</span>
+              </a>
+            </li>
+
+            <li class="sidebar-item">
+              <a class="sidebar-link" href="{{ url_for('students_by_grade') }}" aria-expanded="false">
+                <span class="icon"><ion-icon name="list"></ion-icon></span>
+                <span class="hide-menu">Students by Grade</span>
+              </a>
+            </li>
+
+            <li class="sidebar-item">
+              <a class="sidebar-link" href="{{ url_for('attendance') }}" aria-expanded="false">
+                <span class="icon"><ion-icon name="checkmark-circle-outline"></ion-icon></span>
+                <span class="hide-menu">Register In</span>
+              </a>
+            </li>
+
+            <li class="sidebar-item">
+              <a class="sidebar-link" href="{{ url_for('register_out') }}" aria-expanded="false">
+                <span class="icon"><ion-icon name="door-open"></ion-icon></span>
+                <span class="hide-menu">Register Out</span>
               </a>
             </li>
 

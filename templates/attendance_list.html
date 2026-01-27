@@ -1,0 +1,89 @@
+{% extends "admin_dashboard.html" %}
+{% block content %}
+<link rel="stylesheet" href="../static/assets/css/styles.min.css" />
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
+
+<style>
+.container { max-width: 900px; margin: 0 auto; padding: 20px; }
+.header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+.header h2 { margin: 0; font-size: 22px; }
+.header p { margin: 10px 0 0 0; font-size: 14px; }
+.attendance-table { background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+.table { width: 100%; border-collapse: collapse; }
+.table th { background: #667eea; color: white; padding: 12px; text-align: left; font-weight: 600; font-size: 13px; }
+.table td { padding: 12px; border-bottom: 1px solid #eee; font-size: 14px; }
+.table tr:hover { background: #f5f5f5; }
+.status-badge { display: inline-block; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+.status-present { background: #d4edda; color: #155724; }
+.status-absent { background: #f8d7da; color: #721c24; }
+.empty-state { text-align: center; padding: 40px; color: #999; }
+.back-btn { background: #667eea; color: white; padding: 8px 15px; border: none; border-radius: 5px; cursor: pointer; text-decoration: none; font-size: 13px; font-weight: 600; margin-top: 20px; }
+.back-btn:hover { background: #5568d3; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 20px; }
+.stat-card { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+.stat-card .number { font-size: 24px; font-weight: 700; color: #667eea; }
+.stat-card .label { font-size: 12px; color: #999; margin-top: 5px; }
+</style>
+
+<div class="container">
+  <div class="header">
+    <h2><i class="fas fa-list-check"></i> {{ class_name }} - Attendance</h2>
+    <p>Date: {{ date }}</p>
+  </div>
+
+  {% set present_count = attendance_records|selectattr('3', 'equalto', 'present')|list|length %}
+  {% set absent_count = attendance_records|length - present_count %}
+  
+  <div class="stats">
+    <div class="stat-card">
+      <div class="number">{{ attendance_records|length }}</div>
+      <div class="label">Total Students</div>
+    </div>
+    <div class="stat-card">
+      <div class="number" style="color: #28a745;">{{ present_count }}</div>
+      <div class="label">Present</div>
+    </div>
+    <div class="stat-card">
+      <div class="number" style="color: #dc3545;">{{ absent_count }}</div>
+      <div class="label">Absent</div>
+    </div>
+  </div>
+
+  {% if attendance_records %}
+    <div class="attendance-table">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Admission No</th>
+            <th>Name</th>
+            <th>Status</th>
+            <th>Time In</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for record in attendance_records %}
+          <tr>
+            <td>{{ record[0] }}</td>
+            <td>{{ record[1]|capitalize }} {{ record[2]|capitalize }}</td>
+            <td>
+              <span class="status-badge {% if record[3] == 'present' %}status-present{% else %}status-absent{% endif %}">
+                {{ record[3]|upper }}
+              </span>
+            </td>
+            <td>{{ record[4] if record[4] else '-' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <i class="fas fa-inbox" style="font-size: 48px; margin-bottom: 15px;"></i>
+      <p>No attendance records for this date</p>
+    </div>
+  {% endif %}
+
+  <a href="/attendance" class="back-btn"><i class="fas fa-arrow-left"></i> Back to Attendance</a>
+</div>
+
+{% endblock %}
