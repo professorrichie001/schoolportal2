@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="static/assets/css/n.css" />
 <!-- Material Icons -->
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-
+   
 </head>
 
 <body>
@@ -37,106 +37,128 @@
         <!-- Sidebar navigation-->
         <nav class="sidebar-nav scroll-sidebar" data-simplebar="">
           <ul id="sidebarnav">
+            <!-- Home Section -->
             <li class="nav-small-cap">
-
-
+              <i class="ti ti-home nav-small-cap-icon fs-4"></i>
               <span class="hide-menu">Home</span>
             </li>
             <li class="sidebar-item">
               <a class="sidebar-link" href="{{url_for('teacher_home')}}" aria-expanded="false">
                 <span class="icon"><ion-icon name="home"></ion-icon></span>
-                <span class="hide-menu"> Dashboard</span>
+                <span class="hide-menu">Dashboard</span>
               </a>
             </li>
 
+            <!-- Academic Section -->
             <li class="nav-small-cap">
-              <i class="ti ti-dots nav-small-cap-icon fs-4"></i>
-              <span class="hide-menu">Data</span>
+              <i class="ti ti-book nav-small-cap-icon fs-4"></i>
+              <span class="hide-menu">Academic</span>
             </li>
-
             <li class="sidebar-item">
               <a class="sidebar-link" href="{{ url_for('enroll_class_subjects') }}" aria-expanded="false">
                 <span class="icon"><ion-icon name="book-outline"></ion-icon></span>
                 <span class="hide-menu">Enroll Class Subjects</span>
               </a>
             </li>
-
             <li class="sidebar-item">
               <a class="sidebar-link" href="{{ url_for('manage_student_subjects_page') }}" aria-expanded="false">
                 <span class="icon"><ion-icon name="book-outline"></ion-icon></span>
                 <span class="hide-menu">Manage Student Subjects</span>
               </a>
             </li>
-            
 
+            <!-- Grades & Scores Section -->
+            <li class="nav-small-cap">
+              <i class="ti ti-chart-bar nav-small-cap-icon fs-4"></i>
+              <span class="hide-menu">Grades & Scores</span>
+            </li>
             <li class="sidebar-item">
               <a class="sidebar-link" href="{{ url_for('scores_by_class') }}" aria-expanded="false">
                 <span class="icon"><ion-icon name="newspaper-outline"></ion-icon></span>
                 <span class="hide-menu">Student Scores</span>
               </a>
             </li>
-
             <li class="sidebar-item">
               <a class="sidebar-link" href="{{ url_for('type_check') }}" aria-expanded="false">
-                     <span class="icon"><ion-icon name="clipboard"></ion-icon></span>
-                <span class="hide-menu">View Exam scores</span>
+                <span class="icon"><ion-icon name="clipboard"></ion-icon></span>
+                <span class="hide-menu">View Exam Scores</span>
               </a>
             </li>
-
             <li class="sidebar-item">
               <a class="sidebar-link" href="{{ url_for('view_students_marks') }}" aria-expanded="false">
-                <span class="icon"><ion-icon name="clipboard"></ion-icon></span>
+                <span class="icon"><ion-icon name="checkmark-circle-outline"></ion-icon></span>
                 <span class="hide-menu">Set Exam Scores</span>
               </a>
             </li>
-            
-            <li class="sidebar-item">
-              <a class="sidebar-link" href="{{ url_for('attendance_report') }}" aria-expanded="false">
-                <span class="icon"><ion-icon name="checkmark-circle-outline"></ion-icon></span>
-                <span class="hide-menu">Attendance Report</span>
-              </a>
-            </li>
 
-            <li class="sidebar-item">
-              <a class="sidebar-link" href="{{ url_for('students_by_grade') }}" aria-expanded="false">
-                <span class="icon"><ion-icon name="list"></ion-icon></span>
-                <span class="hide-menu">Students by Grade</span>
-              </a>
+            <!-- Attendance Section -->
+            <li class="nav-small-cap">
+              <i class="ti ti-check nav-small-cap-icon fs-4"></i>
+              <span class="hide-menu">Attendance</span>
             </li>
-
             <li class="sidebar-item">
               <a class="sidebar-link" href="{{ url_for('attendance') }}" aria-expanded="false">
                 <span class="icon"><ion-icon name="checkmark-circle-outline"></ion-icon></span>
                 <span class="hide-menu">Register In</span>
               </a>
             </li>
-
             <li class="sidebar-item">
               <a class="sidebar-link" href="{{ url_for('register_out') }}" aria-expanded="false">
                 <span class="icon"><ion-icon name="door-open"></ion-icon></span>
                 <span class="hide-menu">Register Out</span>
               </a>
             </li>
+            <li class="sidebar-item">
+              <a class="sidebar-link" href="{{ url_for('attendance_report') }}" aria-expanded="false">
+                <span class="icon"><ion-icon name="checkmark-done-outline"></ion-icon></span>
+                <span class="hide-menu">Attendance Report</span>
+              </a>
+            </li>
+            <li class="sidebar-item">
+              <a class="sidebar-link" href="{{ url_for('students_by_grade') }}" aria-expanded="false">
+                <span class="icon"><ion-icon name="list-outline"></ion-icon></span>
+                <span class="hide-menu">Students by Grade</span>
+              </a>
+            </li>
 
+            <!-- Assignments Section -->
+            <li class="nav-small-cap">
+              <i class="ti ti-file-description nav-small-cap-icon fs-4"></i>
+              <span class="hide-menu">Assignments</span>
+            </li>
+            <li class="sidebar-item">
+              <a class="sidebar-link" href="{{ url_for('upload_assignment') }}" aria-expanded="false">
+                <span class="icon"><ion-icon name="cloud-upload-outline"></ion-icon></span>
+                <span class="hide-menu">Upload Assignment</span>
+              </a>
+            </li>
+            <li class="sidebar-item">
+              <a class="sidebar-link" href="{{ url_for('teacher_assignments') }}" aria-expanded="false">
+                <span class="icon"><ion-icon name="document-outline"></ion-icon></span>
+                <span class="hide-menu">My Assignments</span>
+              </a>
+            </li>
+
+            <!-- Settings Section -->
+            <li class="nav-small-cap">
+              <i class="ti ti-settings nav-small-cap-icon fs-4"></i>
+              <span class="hide-menu">Settings</span>
+            </li>
             <li class="sidebar-item">
               <a class="sidebar-link" href="{{url_for('tsetting')}}" aria-expanded="false">
                 <span class="icon"><ion-icon name="settings-outline"></ion-icon></span>
                 <span class="hide-menu">Settings</span>
               </a>
             </li>
-
-
             <li class="sidebar-item">
               <a class="sidebar-link" href="#" aria-expanded="false">
                 <span class="icon"><ion-icon name="lock-closed-outline"></ion-icon></span>
                 <span class="hide-menu">Change Password</span>
               </a>
             </li>
-
-
             <li class="sidebar-item">
               <a class="sidebar-link" href="{{ url_for('logout') }}" aria-expanded="false">
-                 <span class="icon"><ion-icon name="log-out-outline"></ion-icon></span>
+                <span class="icon"><ion-icon name="log-out-outline"></ion-icon></span>
                 <span class="hide-menu">Logout</span>
               </a>
             </li>

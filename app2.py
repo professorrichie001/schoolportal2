@@ -7,7 +7,8 @@ import base64
 import webbrowser
 import qrcode3
 import qr_scanner
-from flask import Flask, render_template, request, redirect,jsonify, flash, url_for, send_from_directory, session, send_file, request
+from flask import Flask, render_template, request, redirect,jsonify, flash, url_for, send_from_directory, session, send_file
+from werkzeug.utils import secure_filename
 import sqlite3, os, database, document_functions, json,requests
 import io
 from reportlab.lib.pagesizes import A4
@@ -27,6 +28,14 @@ app = Flask(__name__)
 app.secret_key = 'My_Secret_Key'
 
 TOTAL_FEES = 2000
+
+# Assignment upload configuration
+PROTECTED_ASSIGNMENTS_FOLDER = os.path.join(os.getcwd(), 'protected_assignments')
+ALLOWED_ASSIGNMENT_EXTENSIONS = {'.pdf', '.docx', '.doc', '.pptx', '.ppt', '.txt', '.zip', '.rar'}
+
+def allowed_assignment_file(filename):
+    _, ext = os.path.splitext(filename.lower())
+    return ext in ALLOWED_ASSIGNMENT_EXTENSIONS
 
 @app.route('/', methods=['GET', 'POST'])
 def login():
@@ -2884,6 +2893,252 @@ def get_todays_checkouts():
     
     return jsonify({'success': True, 'checkouts': checkout_students})
     
+
+
+@app.route('/teacher/upload_assignment', methods=['GET', 'POST'])
+def upload_assignment():
+    # teachers only
+    if 'userName' not in session:
+        flash('Please log in as a teacher to upload assignments')
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        target_class_display = request.form.get('target_class', 'All')
+        # Convert display name back to numeric key for storage
+        target_class = next((k for k, v in class_mapping.items() if v == target_class_display), target_class_display)
+        description = request.form.get('description', '')
+        f = request.files.get('assignment_file')
+        if not f or f.filename == '':
+            flash('No file selected')
+            return redirect(request.url)
+
+        if not allowed_assignment_file(f.filename):
+            flash('File type not allowed')
+            return redirect(request.url)
+
+        os.makedirs(PROTECTED_ASSIGNMENTS_FOLDER, exist_ok=True)
+        stored_name = f"{int(time.time())}_{secure_filename(f.filename)}"
+        filepath = os.path.join(PROTECTED_ASSIGNMENTS_FOLDER, stored_name)
+        f.save(filepath)
+
+        with sqlite3.connect('student.db') as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS assignments(
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    stored_name TEXT,
+                    original_name TEXT,
+                    target_class TEXT,
+                    uploaded_by TEXT,
+                    upload_time TEXT,
+                    description TEXT
+                )
+            ''')
+            # Add description column if it doesn't exist (migration)
+            try:
+                cursor.execute('ALTER TABLE assignments ADD COLUMN description TEXT')
+            except sqlite3.OperationalError:
+                # Column already exists
+                pass
+            
+            cursor.execute('''
+                INSERT INTO assignments (stored_name, original_name, target_class, uploaded_by, upload_time, description)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (stored_name, f.filename, target_class, session.get('userName'), datetime.now().isoformat(), description))
+            conn.commit()
+
+        flash('Assignment uploaded successfully')
+        return redirect(url_for('teacher_assignments'))
+
+    # GET: list classes assigned to this teacher using the mapping
+    teacher_username = session.get('userName')
+    with sqlite3.connect('admin.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT grade FROM teachers WHERE username = ?', (teacher_username,))
+        result = cursor.fetchone()
+    
+    classes = []
+    if result and result[0]:
+        # Parse comma-separated grade numbers
+        grade_numbers = [num.strip() for num in result[0].split(',')]
+        # Map to display names using class_mapping1
+        classes = [(num, class_mapping1.get(num, num)) for num in grade_numbers if num in class_mapping1]
+
+    return render_template('upload_assignment.html', classes=classes, profile_pic=database.get_profile_t(teacher_username))
+
+
+@app.route('/teacher/assignments')
+def teacher_assignments():
+    # teachers view their own uploaded assignments
+    if 'userName' not in session:
+        return redirect(url_for('login'))
+
+    teacher_username = session.get('userName')
+
+    with sqlite3.connect('student.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, original_name, target_class, description, upload_time
+            FROM assignments
+            WHERE uploaded_by = ?
+            ORDER BY upload_time DESC
+        ''', (teacher_username,))
+        rows = cursor.fetchall()
+
+    assignments = [
+        {
+            'id': r[0],
+            'name': r[1],
+            'target_class': class_mapping1.get(r[2], r[2]),  # Convert key to display name
+            'description': r[3] if r[3] else '(No description)',
+            'upload_time': r[4]
+        }
+        for r in rows
+    ]
+
+    return render_template('teacher_assignments.html', assignments=assignments, profile_pic=database.get_profile_t(teacher_username))
+
+
+@app.route('/teacher/assignments/delete/<int:assignment_id>', methods=['POST'])
+def delete_assignment(assignment_id):
+    # delete assignment (teachers only)
+    if 'userName' not in session:
+        flash('Please log in as a teacher')
+        return redirect(url_for('login'))
+
+    teacher_username = session.get('userName')
+
+    with sqlite3.connect('student.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT stored_name, uploaded_by FROM assignments WHERE id = ?', (assignment_id,))
+        row = cursor.fetchone()
+
+    if not row:
+        flash('Assignment not found')
+        return redirect(url_for('teacher_assignments'))
+
+    stored_name, uploaded_by = row
+
+    # Authorization: only the teacher who uploaded it can delete it
+    if uploaded_by != teacher_username:
+        flash('You can only delete your own assignments')
+        return redirect(url_for('teacher_assignments'))
+
+    # Delete file from protected folder
+    filepath = os.path.join(PROTECTED_ASSIGNMENTS_FOLDER, stored_name)
+    if os.path.exists(filepath):
+        try:
+            os.remove(filepath)
+        except Exception as e:
+            flash(f'Error deleting file: {str(e)}')
+            return redirect(url_for('teacher_assignments'))
+
+    # Delete from database
+    with sqlite3.connect('student.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM assignments WHERE id = ?', (assignment_id,))
+        conn.commit()
+
+    flash('Assignment deleted successfully')
+    return redirect(url_for('teacher_assignments'))
+
+
+@app.route('/assignments')
+def assignments_list():
+    # students view assignments for their class
+    if 'admission_no' not in session:
+        return redirect(url_for('login'))
+
+    admission_no = session.get('admission_no')
+    student_grade = database.get_grade_st(admission_no) or 'Unassigned'
+    
+    # Normalize student grade to numeric key
+    # Try to find the numeric key that maps to the student's grade
+    grade_key = None
+    if student_grade != 'Unassigned':
+        # Check if it's already a numeric key
+        if student_grade in class_mapping1:
+            grade_key = student_grade
+        else:
+            # Try to find it in reverse (grade display name to key)
+            for key, display_name in class_mapping1.items():
+                if display_name == student_grade:
+                    grade_key = key
+                    break
+            # If still not found, use the student grade as-is
+            if not grade_key:
+                grade_key = student_grade
+
+    with sqlite3.connect('student.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, original_name, target_class, uploaded_by, upload_time, description
+            FROM assignments
+            WHERE target_class = ?
+            ORDER BY upload_time DESC
+        ''', (grade_key,))
+        rows = cursor.fetchall()
+
+    assignments = [
+        {
+            'id': r[0],
+            'name': r[1],
+            'target_class': class_mapping1.get(r[2], r[2]),  # Convert key to display name
+            'uploaded_by': r[3],
+            'upload_time': r[4],
+            'description': r[5] if r[5] else '(No description)'
+        }
+        for r in rows
+    ]
+
+    return render_template('assignments.html', assignments=assignments, profile_pic=database.get_profile(admission_no))
+
+
+@app.route('/assignments/download/<int:assignment_id>')
+def download_assignment(assignment_id):
+    with sqlite3.connect('student.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT stored_name, original_name, target_class FROM assignments WHERE id = ?', (assignment_id,))
+        row = cursor.fetchone()
+
+    if not row:
+        flash('Assignment not found')
+        return redirect(url_for('assignments_list'))
+
+    stored_name, original_name, target_class = row
+
+    # Authorization: allow if student and class matches, or if teacher is logged in
+    if 'admission_no' in session:
+        student_grade = database.get_grade_st(session.get('admission_no'))
+        # Normalize student grade to numeric key
+        grade_key = None
+        if student_grade:
+            if student_grade in class_mapping1:
+                grade_key = student_grade
+            else:
+                for key, display_name in class_mapping1.items():
+                    if display_name == student_grade:
+                        grade_key = key
+                        break
+                if not grade_key:
+                    grade_key = student_grade
+        
+        if grade_key != target_class:
+            flash('You are not authorized to download this file')
+            return redirect(url_for('assignments_list'))
+    elif 'userName' in session:
+        # teacher/manager allowed
+        pass
+    else:
+        return redirect(url_for('login'))
+
+    filepath = os.path.join(PROTECTED_ASSIGNMENTS_FOLDER, stored_name)
+    if not os.path.exists(filepath):
+        flash('File missing on server')
+        return redirect(url_for('assignments_list'))
+
+    return send_file(filepath, as_attachment=True, download_name=original_name)
+
     return jsonify({'success': True, 'checkouts': checkout_students})
 
 

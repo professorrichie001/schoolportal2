@@ -1,0 +1,43 @@
+{% extends 'admin_dashboard.html' %}
+{% block content %}
+<link rel="stylesheet" href="../static/assets/css/styles.min.css" />
+    <link rel="stylesheet" href="../static/assets/css/n.css" />
+<!-- Material Icons -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+
+<div class="card">
+  <div class="card-body">
+    <h4>Upload Assignment</h4>
+    <form method="post" enctype="multipart/form-data">
+      <div class="mb-3">
+        <label for="target_class" class="form-label">Target Class</label>
+        <select id="target_class" name="target_class" class="form-select">
+          {% for key, display_name in classes %}
+            <option value="{{ key }}">{{ display_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="mb-3">
+        <label for="description" class="form-label">Description</label>
+        <textarea id="description" name="description" class="form-control" rows="4" placeholder="Add assignment description..."></textarea>
+      </div>
+      <div class="mb-3">
+        <label for="assignment_file" class="form-label">File</label>
+        <input type="file" id="assignment_file" name="assignment_file" class="form-control" required />
+      </div>
+      <button type="submit" class="btn btn-primary">Upload</button>
+    </form>
+  </div>
+</div>
+<script src="../static/assets/libs/jquery/jquery.min.js"></script>
+  <script src="../static/assets/libs/bootstrap.bundle.min.js"></script>
+  <script src="../static/assets/js/sidebarmenu.js"></script>
+  <script src="../static/assets/js/app.min.js"></script>
+  <script src="../static/assets/libs/apexcharts/apexcharts.min.js"></script>
+  <script src="../static/assets/libs/simplebar/simplebar.js"></script>
+  <script src="../static/assets/js/dashboard.js"></script>
+      <script src="/../static/vendor/chart.js/Chart.min.js"></script>
+  <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+  <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
+
+{% endblock %}
